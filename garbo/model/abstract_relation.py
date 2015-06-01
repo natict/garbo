@@ -10,8 +10,11 @@ class AbstractRelation(object):
 
     __metaclass__ = ABCMeta
 
-    def __init__(self, *rids):
+    def __init__(self, *urids):
         """
-        :param rids: A collection of Resource IDs, sharing some relation
+        :param urids: A collection of Universal Resource IDs, sharing some relation
         """
-        self.rids = tuple(rids)
+        self.urids = tuple(sorted(urids))
+
+    def __str__(self):
+        return self.urids.__str__()
