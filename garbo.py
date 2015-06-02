@@ -14,7 +14,7 @@ def main():
     graph = D3JSForce()
     for item in ec2.collect_all():
         graph.add_item(item)
-        print item  # TODO: write to garbo storage
+        # print item  # TODO: write to garbo storage
     graph.export('d3js/garbo.json')
 
 

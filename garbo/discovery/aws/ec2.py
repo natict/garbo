@@ -117,7 +117,7 @@ def collect_all(aws_access_key=None, aws_secret_key=None):
     aws_access_key = aws_access_key or config.aws.access_key
     aws_secret_key = aws_secret_key or config.aws.secret_access_key
 
-    regions = ('us-east-1',) if config.aws.debug else (r.name for r in boto.ec2.regions())
+    regions = config.aws.regions or (r.name for r in boto.ec2.regions())
     for region in regions:
         conn = boto.ec2.connect_to_region(region,
                                           aws_access_key_id=aws_access_key,
