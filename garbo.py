@@ -15,7 +15,7 @@ def main():
     for item in ec2.collect_all():
         graph.add_item(item)
         print item  # TODO: write to garbo storage
-    graph.export('d3js/garbo.js')
+    graph.export('d3js/garbo.json')
 
 
 if __name__ == '__main__':
