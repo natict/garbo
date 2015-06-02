@@ -33,6 +33,7 @@ def snapshots(conn):
     for snapshot in conn.get_all_snapshots(owner='self'):
         yield EBSSnapshot(region=conn.region.name, snapshot_id=snapshot.id,
                           created=dateutil.parser.parse(snapshot.start_time))
+        # TODO: relation to self-owned volumes
 
 
 @aws_collector
@@ -105,6 +106,7 @@ def ebs_volumes(conn):
             yield Relation(Instance(region=conn.region.name,
                                     instance_id=volume.attach_data.instance_id),
                            ebs_volume_resource)
+        # TODO: relation to self-owned snapshot
 
 
 def collect_all(aws_access_key=None, aws_secret_key=None):
