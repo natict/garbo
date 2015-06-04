@@ -1,9 +1,9 @@
 """
 Garbo AWS discovery configuration
 """
-
-access_key = ''
-secret_access_key = ''
+import os
+access_key = os.environ['AMAZON_ACCESS_KEY_ID']
+secret_access_key = os.environ['AMAZON_SECRET_ACCESS_KEY']
 
 # which regions to discover, set to [] for all regions
-regions = ['us-east-1']
+regions = ['us-east-1', 'eu-west-1']

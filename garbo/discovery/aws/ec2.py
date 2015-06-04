@@ -24,6 +24,7 @@ _resource_collectors = set()
 
 def aws_collector(f):
     _resource_collectors.add(f)
+    return f
 
 
 @aws_collector
