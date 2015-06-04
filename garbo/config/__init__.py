@@ -1,4 +1,9 @@
-import ConfigParser
+try:
+    import ConfigParser
+except ImportError:
+    # noinspection PyPep8Naming
+    import configparser as ConfigParser
+
 import pkgutil
 
 from garbo.config import aws

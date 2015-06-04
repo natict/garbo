@@ -9,6 +9,7 @@ __author__ = 'nati'
 # TODO: support more resource types
 # TODO: remove static types
 
+
 class D3JSForce(object):
     def __init__(self):
         self.nodes = []
