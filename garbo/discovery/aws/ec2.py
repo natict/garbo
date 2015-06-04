@@ -39,10 +39,14 @@ def snapshots(conn):
 
     :param conn: boto EC2 connection
     """
+    volume_ids = [v.id for v in conn.get_all_volumes()]
     for snapshot in conn.get_all_snapshots(owner='self'):
-        yield EBSSnapshot(region=conn.region.name, snapshot_id=snapshot.id,
-                          created=dateutil.parser.parse(snapshot.start_time))
-        # TODO: relation to self-owned volumes
+        snapshot_resource = EBSSnapshot(region=conn.region.name, snapshot_id=snapshot.id,
+                                        created=dateutil.parser.parse(snapshot.start_time))
+        yield snapshot_resource
+        if snapshot.volume_id in volume_ids:
+            yield Relation(snapshot_resource,
+                           EBSVolume(region=conn.region.name, volume_id=snapshot.volume_id))
 
 
 @aws_collector
@@ -89,16 +93,16 @@ def images(conn):
 
     :param conn: boto EC2 connection
     """
+    snapshot_ids = [s.id for s in conn.get_all_snapshots(owner='self')]
     for image in conn.get_all_images(owners='self'):
         image_resource = Image(region=conn.region.name, image_id=image.id,
                                created=dateutil.parser.parse(image.creationDate))
         yield image_resource
         # Images can have mapping to an EBS snapshot (stored in S3)
-        for snapshot_id in {v.snapshot_id for v in image.block_device_mapping.values() if v.snapshot_id}:
-            # only yield relations to snapshots within the same account
-            if conn.get_all_snapshots(snapshot_ids=[snapshot_id], owner='self'):
-                yield Relation(image_resource,
-                               EBSSnapshot(region=conn.region.name, snapshot_id=snapshot_id))
+        for snapshot_id in {v.snapshot_id for v in image.block_device_mapping.values()
+                            if v.snapshot_id in snapshot_ids}:
+            yield Relation(image_resource,
+                           EBSSnapshot(region=conn.region.name, snapshot_id=snapshot_id))
 
 
 @aws_collector
@@ -108,13 +112,14 @@ def instances(conn):
 
     :param conn: boto EC2 connection
     """
+    image_ids = [i.id for i in conn.get_all_images(owners='self')]
     for instance in conn.get_only_instances():
         instance_resource = Instance(region=conn.region.name, instance_id=instance.id,
                                      created=dateutil.parser.parse(instance.launch_time),
                                      used=Instance.is_used(instance))
         yield instance_resource
         # only yield relations for self-owned images
-        if conn.get_all_images(image_ids=[instance.image_id], owners='self'):
+        if instance.image_id in image_ids:
             yield Relation(instance_resource,
                            Image(region=conn.region.name, image_id=instance.image_id))
         # security groups relations
@@ -130,6 +135,7 @@ def ebs_volumes(conn):
 
     :param conn: boto EC2 connection
     """
+    snapshot_ids = [s.id for s in conn.get_all_snapshots(owner='self')]
     for volume in conn.get_all_volumes():
         ebs_volume_resource = EBSVolume(region=conn.region.name, volume_id=volume.id,
                                         created=dateutil.parser.parse(volume.create_time))
@@ -139,7 +145,10 @@ def ebs_volumes(conn):
             yield Relation(Instance(region=conn.region.name,
                                     instance_id=volume.attach_data.instance_id),
                            ebs_volume_resource)
-        # TODO: relation to self-owned snapshot
+        # Which snapshot was this volume created from
+        if volume.snapshot_id in snapshot_ids:
+            yield Relation(EBSSnapshot(region=conn.region.name, snapshot_id=volume.snapshot_id),
+                           ebs_volume_resource)
 
 
 def collect_all(aws_access_key=None, aws_secret_key=None):
