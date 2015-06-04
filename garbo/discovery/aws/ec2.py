@@ -2,7 +2,6 @@
     This a garbo discovery service for AWS EC2 resources
 """
 import logging
-from samba.netcmd.dns import dns_name_equal
 
 import dateutil.parser
 import boto.ec2

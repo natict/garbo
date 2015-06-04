@@ -10,7 +10,7 @@ config = {
     'download_url': '',
     'author_email': 'nocoot at gmail',
     'version': '0.1',
-    'install_requires': ['nose'],
+    'install_requires': ['boto', 'python-dateutil'],
     'packages': ['garbo'],
     'scripts': [],
     'name': 'garbo'
