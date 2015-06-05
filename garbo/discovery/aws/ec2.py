@@ -9,13 +9,8 @@ import boto.ec2.elb
 import boto.exception
 
 from garbo import config
-from garbo.model.aws.ebs_snapshot import EBSSnapshot
-from garbo.model.aws.ebs_volume import EBSVolume
-from garbo.model.aws.image import Image
-from garbo.model.aws.instance import Instance
-from garbo.model.aws.load_balancer import LoadBalancer
-from garbo.model.aws.security_group import SecurityGroup
-from garbo.model.relation import Relation
+from garbo.model.aws.ec2 import EBSSnapshot, EBSVolume, Image, Instance, LoadBalancer, SecurityGroup
+from garbo.model import Relation
 
 __author__ = 'nati'
 
@@ -41,12 +36,12 @@ def snapshots(conn):
     """
     volume_ids = [v.id for v in conn.get_all_volumes()]
     for snapshot in conn.get_all_snapshots(owner='self'):
-        snapshot_resource = EBSSnapshot(region=conn.region.name, snapshot_id=snapshot.id,
+        snapshot_resource = EBSSnapshot(region=conn.region.name, resource_id=snapshot.id,
                                         created=dateutil.parser.parse(snapshot.start_time))
         yield snapshot_resource
         if snapshot.volume_id in volume_ids:
             yield Relation(snapshot_resource,
-                           EBSVolume(region=conn.region.name, volume_id=snapshot.volume_id))
+                           EBSVolume(region=conn.region.name, resource_id=snapshot.volume_id))
 
 
 @aws_collector
@@ -61,17 +56,19 @@ def load_balancers(conn):
                                           aws_access_key_id=conn.provider.access_key,
                                           aws_secret_access_key=conn.provider.secret_key)
     for elb in conn.get_all_load_balancers():
-        lb_resource = LoadBalancer(region=conn.region.name, dns_name=elb.dns_name,
+        lb_resource = LoadBalancer(region=conn.region.name, resource_id=elb.dns_name,
                                    created=dateutil.parser.parse(elb.created_time))
         yield lb_resource
         # security groups relations
         for group_id in elb.security_groups:
             yield Relation(lb_resource,
-                           SecurityGroup(region=conn.region.name, group_id=group_id))
+                           SecurityGroup(region=conn.region.name, resource_id=group_id),
+                           dependency=True)
         # instances relations
         for instance_id in {i.id for i in elb.instances}:
             yield Relation(lb_resource,
-                           Instance(region=conn.region.name, instance_id=instance_id))
+                           Instance(region=conn.region.name, resource_id=instance_id),
+                           dependency=True)
 
 
 @aws_collector
@@ -83,7 +80,8 @@ def security_groups(conn):
     """
     for group in conn.get_all_security_groups():
         # Fun fact: there is no creation/modification date associated with AWS security groups
-        yield SecurityGroup(region=conn.region.name, group_id=group.id)
+        yield SecurityGroup(region=conn.region.name, resource_id=group.id)
+        # TODO: add cross-group dependency
 
 
 @aws_collector
@@ -95,14 +93,15 @@ def images(conn):
     """
     snapshot_ids = [s.id for s in conn.get_all_snapshots(owner='self')]
     for image in conn.get_all_images(owners='self'):
-        image_resource = Image(region=conn.region.name, image_id=image.id,
+        image_resource = Image(region=conn.region.name, resource_id=image.id,
                                created=dateutil.parser.parse(image.creationDate))
         yield image_resource
         # Images can have mapping to an EBS snapshot (stored in S3)
         for snapshot_id in {v.snapshot_id for v in image.block_device_mapping.values()
                             if v.snapshot_id in snapshot_ids}:
             yield Relation(image_resource,
-                           EBSSnapshot(region=conn.region.name, snapshot_id=snapshot_id))
+                           EBSSnapshot(region=conn.region.name, resource_id=snapshot_id),
+                           dependency=True)
 
 
 @aws_collector
@@ -114,18 +113,19 @@ def instances(conn):
     """
     image_ids = [i.id for i in conn.get_all_images(owners='self')]
     for instance in conn.get_only_instances():
-        instance_resource = Instance(region=conn.region.name, instance_id=instance.id,
+        instance_resource = Instance(region=conn.region.name, resource_id=instance.id,
                                      created=dateutil.parser.parse(instance.launch_time),
                                      used=Instance.is_used(instance))
         yield instance_resource
         # only yield relations for self-owned images
         if instance.image_id in image_ids:
             yield Relation(instance_resource,
-                           Image(region=conn.region.name, image_id=instance.image_id))
+                           Image(region=conn.region.name, resource_id=instance.image_id))
         # security groups relations
         for group_id in {sg.id for sg in instance.groups}:
             yield Relation(instance_resource,
-                           SecurityGroup(region=conn.region.name, group_id=group_id))
+                           SecurityGroup(region=conn.region.name, resource_id=group_id),
+                           dependency=True)
 
 
 @aws_collector
@@ -137,18 +137,19 @@ def ebs_volumes(conn):
     """
     snapshot_ids = [s.id for s in conn.get_all_snapshots(owner='self')]
     for volume in conn.get_all_volumes():
-        ebs_volume_resource = EBSVolume(region=conn.region.name, volume_id=volume.id,
+        ebs_volume_resource = EBSVolume(region=conn.region.name, resource_id=volume.id,
                                         created=dateutil.parser.parse(volume.create_time))
         yield ebs_volume_resource
         # If volume is attached, yield a relation to the instance
         if volume.attach_data.status in ('attaching', 'attached'):
             yield Relation(Instance(region=conn.region.name,
-                                    instance_id=volume.attach_data.instance_id),
-                           ebs_volume_resource)
+                                    resource_id=volume.attach_data.instance_id),
+                           ebs_volume_resource,
+                           dependency=True)
         # Which snapshot was this volume created from
         if volume.snapshot_id in snapshot_ids:
-            yield Relation(EBSSnapshot(region=conn.region.name, snapshot_id=volume.snapshot_id),
-                           ebs_volume_resource)
+            yield Relation(ebs_volume_resource,
+                           EBSSnapshot(region=conn.region.name, resource_id=volume.snapshot_id))
 
 
 def collect_all(aws_access_key=None, aws_secret_key=None):

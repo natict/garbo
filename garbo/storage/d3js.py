@@ -1,8 +1,7 @@
 import json
 import logging
-from garbo.model.abstract_relation import AbstractRelation
-from garbo.model.abstract_resource import AbstractResource
-from garbo.model.aws.instance import Instance
+from garbo.model import Relation, AbstractResource
+from garbo.model.aws.ec2 import Instance
 
 __author__ = 'nati'
 
@@ -19,7 +18,7 @@ class D3JSForce(object):
     def add_item(self, item):
         if isinstance(item, AbstractResource):
             self.nodes.append(item)
-        elif isinstance(item, AbstractRelation):
+        elif isinstance(item, Relation):
             self.links.append(item)
         else:
             logging.warn('unable to add item, not a valid resource or relation')
@@ -28,8 +27,8 @@ class D3JSForce(object):
         # convert to D3JSForce
         nodes = [{"name": str(n), "group": D3JSForce.to_group(n)} for n in self.nodes]
         nodes_dict = {nd.get('name'): i for i, nd in enumerate(nodes)}
-        links = [{"source": nodes_dict.get(l.urids[0]),
-                  "target": nodes_dict.get(l.urids[1]),
+        links = [{"source": nodes_dict.get(l.source),
+                  "target": nodes_dict.get(l.target),
                   "value": 1} for l in self.links]
         with open(filename, 'wb') as file_out:
             json.dump({"nodes": nodes, "links": links}, file_out, indent=2)
