@@ -3,7 +3,6 @@
 
     Plugins may extend these definitions to support more cloud providers
 """
-from collections import namedtuple
 
 __author__ = 'nati'
 

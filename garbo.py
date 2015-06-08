@@ -1,6 +1,7 @@
 """
 ...
 """
+import logging
 from garbo import config
 
 from garbo.discovery.aws import ec2
@@ -11,6 +12,7 @@ __author__ = 'nati'
 
 def main():
     config.load()
+    logging.basicConfig(level=logging.INFO)
     graph = D3JSForce()
     for item in ec2.collect_all():
         graph.add_item(item)

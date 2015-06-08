@@ -3,7 +3,7 @@
 """
 import logging
 
-import dateutil.parser
+import boto.utils
 import boto.ec2
 import boto.ec2.autoscale
 import boto.ec2.elb
@@ -12,7 +12,7 @@ import boto.exception
 from garbo import config
 from garbo.model.aws.ec2 import EBSSnapshot, EBSVolume, Image, Instance, LoadBalancer, SecurityGroup, ElasticIP, \
     KeyPair, \
-    AutoScalingGroup
+    AutoScalingGroup, LaunchConfiguration
 from garbo.model import Relation
 
 __author__ = 'nati'
@@ -40,7 +40,7 @@ def snapshots(conn):
     volume_ids = [v.id for v in conn.get_all_volumes()]
     for snapshot in conn.get_all_snapshots(owner='self'):
         snapshot_resource = EBSSnapshot(region=conn.region.name, resource_id=snapshot.id,
-                                        created=dateutil.parser.parse(snapshot.start_time))
+                                        created=boto.utils.parse_ts(snapshot.start_time))
         yield snapshot_resource
         if snapshot.volume_id in volume_ids:
             yield Relation(snapshot_resource,
@@ -60,7 +60,7 @@ def load_balancers(conn):
                                           aws_secret_access_key=conn.provider.secret_key)
     for elb in conn.get_all_load_balancers():
         lb_resource = LoadBalancer(region=conn.region.name, resource_id=elb.dns_name,
-                                   created=dateutil.parser.parse(elb.created_time))
+                                   created=boto.utils.parse_ts(elb.created_time))
         yield lb_resource
         # security groups relations
         for group_id in elb.security_groups:
@@ -111,6 +111,39 @@ def _ec2_to_autoscale(conn):
 
 
 @aws_collector
+def launch_configurations(conn):
+    """
+    Collect EC2 Elastic IPs
+
+    :param conn: boto EC2 connection
+    """
+    # using EC2 connection to fetch self owned image ids
+    image_ids = [i.id for i in conn.get_all_images(owners='self')]
+
+    conn = _ec2_to_autoscale(conn)
+    for lc in conn.get_all_launch_configurations():
+        # Fun Fact: LaunchConfiguration created_time is not an ISO 8601, but a parsed datetime
+        lc_resource = LaunchConfiguration(region=conn.region.name, resource_id=lc.name,
+                                          created=lc.created_time)
+        yield lc_resource
+        # key pair relation
+        if lc.key_name:
+            yield Relation(lc_resource,
+                           KeyPair(region=conn.region.name, resource_id=lc.key_name),
+                           dependency=True)
+        # self owned image relation
+        if lc.image_id in image_ids:
+            yield Relation(lc_resource,
+                           Image(region=conn.region.name, resource_id=lc.image_id),
+                           dependency=True)
+        # security groups relations
+        for group_id in set(lc.security_groups):
+            yield Relation(lc_resource,
+                           SecurityGroup(region=conn.region.name, resource_id=group_id),
+                           dependency=True)
+
+
+@aws_collector
 def auto_scaling_groups(conn):
     """
     Collect EC2 Elastic IPs
@@ -121,12 +154,17 @@ def auto_scaling_groups(conn):
 
     for asg in conn.get_all_groups():
         asg_resource = AutoScalingGroup(region=conn.region.name, resource_id=asg.name,
-                                        created=dateutil.parser.parse(asg.created_time))
+                                        created=boto.utils.parse_ts(asg.created_time))
         yield asg_resource
         # Auto Scaling Group is associated with multiple instances
         for instance_id in {i.instance_id for i in asg.instances}:
             yield Relation(asg_resource,
                            Instance(region=conn.region.name, resource_id=instance_id),
+                           dependency=True)
+        # Launch Configuration
+        if asg.launch_config_name:
+            yield Relation(asg_resource,
+                           LaunchConfiguration(region=conn.region.name, resource_id=asg.launch_config_name),
                            dependency=True)
 
 
@@ -157,7 +195,7 @@ def images(conn):
     snapshot_ids = [s.id for s in conn.get_all_snapshots(owner='self')]
     for image in conn.get_all_images(owners='self'):
         image_resource = Image(region=conn.region.name, resource_id=image.id,
-                               created=dateutil.parser.parse(image.creationDate))
+                               created=boto.utils.parse_ts(image.creationDate))
         yield image_resource
         # Images can have mapping to an EBS snapshot (stored in S3)
         for snapshot_id in {v.snapshot_id for v in image.block_device_mapping.values()
@@ -177,7 +215,7 @@ def instances(conn):
     image_ids = [i.id for i in conn.get_all_images(owners='self')]
     for instance in conn.get_only_instances():
         instance_resource = Instance(region=conn.region.name, resource_id=instance.id,
-                                     created=dateutil.parser.parse(instance.launch_time),
+                                     created=boto.utils.parse_ts(instance.launch_time),
                                      used=Instance.is_used(instance))
         yield instance_resource
         if instance.key_name:
@@ -205,7 +243,7 @@ def ebs_volumes(conn):
     snapshot_ids = [s.id for s in conn.get_all_snapshots(owner='self')]
     for volume in conn.get_all_volumes():
         ebs_volume_resource = EBSVolume(region=conn.region.name, resource_id=volume.id,
-                                        created=dateutil.parser.parse(volume.create_time))
+                                        created=boto.utils.parse_ts(volume.create_time))
         yield ebs_volume_resource
         # If volume is attached, yield a relation to the instance
         if volume.attach_data.status in ('attaching', 'attached'):
@@ -234,7 +272,9 @@ def collect_all(aws_access_key=None, aws_secret_key=None):
         conn = boto.ec2.connect_to_region(region,
                                           aws_access_key_id=aws_access_key,
                                           aws_secret_access_key=aws_secret_key)
+        logging.info('running AWS EC2 collectors on %s', region)
         for collector in _resource_collectors:
+            logging.info('collecting %s', collector.__name__)
             try:
                 for item in collector(conn):
                     yield item

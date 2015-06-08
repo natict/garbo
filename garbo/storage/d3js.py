@@ -24,12 +24,14 @@ class D3JSForce(object):
             logging.warn('unable to add item, not a valid resource or relation')
 
     def export(self, filename):
+        logging.info('exporting %d resources, and %d relations', len(self.nodes), len(self.links))
         # convert to D3JSForce
         nodes = [{"name": str(n), "group": D3JSForce.to_group(n)} for n in self.nodes]
         nodes_dict = {nd.get('name'): i for i, nd in enumerate(nodes)}
         links = [{"source": nodes_dict.get(l.source),
                   "target": nodes_dict.get(l.target),
-                  "value": 1} for l in self.links]
+                  "value": 1} for l in self.links
+                 if l.source in nodes_dict and l.target in nodes_dict]
         with open(filename, 'wb') as file_out:
             json.dump({"nodes": nodes, "links": links}, file_out, indent=2)
 
