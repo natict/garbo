@@ -52,7 +52,18 @@ class Instance(EC2BaseResource):
         return True if instance and \
                        instance.state_code in cls.__USED_STATE_CODES else False
 
-# TODO: add Auto Scaling Group
-# TODO: add Launch Configuration
-# TODO: add EC2 Key Pair
-# TODO: add Elastic IP
+
+class AutoScalingGroup(EC2BaseResource):
+    pass
+
+
+class LaunchConfiguration(EC2BaseResource):
+    pass
+
+
+class KeyPair(EC2BaseResource):
+    pass
+
+
+class ElasticIP(EC2BaseResource):
+    pass

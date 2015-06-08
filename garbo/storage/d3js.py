@@ -33,7 +33,8 @@ class D3JSForce(object):
         with open(filename, 'wb') as file_out:
             json.dump({"nodes": nodes, "links": links}, file_out, indent=2)
 
-    TYPE_TO_GROUP = ['SecurityGroup', 'LoadBalancer', 'EBSVolume', 'EBSSnapshot', 'Image']
+    TYPE_TO_GROUP = ['SecurityGroup', 'LoadBalancer', 'EBSVolume', 'EBSSnapshot', 'Image', 'ElasticIP',
+                     'KeyPair', 'LaunchConfiguration', 'AutoScalingGroup']
 
     @classmethod
     def to_group(cls, item):

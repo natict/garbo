@@ -5,11 +5,14 @@ import logging
 
 import dateutil.parser
 import boto.ec2
+import boto.ec2.autoscale
 import boto.ec2.elb
 import boto.exception
 
 from garbo import config
-from garbo.model.aws.ec2 import EBSSnapshot, EBSVolume, Image, Instance, LoadBalancer, SecurityGroup
+from garbo.model.aws.ec2 import EBSSnapshot, EBSVolume, Image, Instance, LoadBalancer, SecurityGroup, ElasticIP, \
+    KeyPair, \
+    AutoScalingGroup
 from garbo.model import Relation
 
 __author__ = 'nati'
@@ -91,6 +94,60 @@ def security_groups(conn):
 
 
 @aws_collector
+def key_pairs(conn):
+    """
+    Collect EC2 Key Pairs
+
+    :param conn: boto EC2 connection
+    """
+    for key_pair in conn.get_all_key_pairs():
+        yield KeyPair(region=conn.region.name, resource_id=key_pair.name)
+
+
+def _ec2_to_autoscale(conn):
+    return boto.ec2.autoscale.connect_to_region(conn.region.name,
+                                                aws_access_key_id=conn.provider.access_key,
+                                                aws_secret_access_key=conn.provider.secret_key)
+
+
+@aws_collector
+def auto_scaling_groups(conn):
+    """
+    Collect EC2 Elastic IPs
+
+    :param conn: boto EC2 connection
+    """
+    conn = _ec2_to_autoscale(conn)
+
+    for asg in conn.get_all_groups():
+        asg_resource = AutoScalingGroup(region=conn.region.name, resource_id=asg.name,
+                                        created=dateutil.parser.parse(asg.created_time))
+        yield asg_resource
+        # Auto Scaling Group is associated with multiple instances
+        for instance_id in {i.instance_id for i in asg.instances}:
+            yield Relation(asg_resource,
+                           Instance(region=conn.region.name, resource_id=instance_id),
+                           dependency=True)
+
+
+@aws_collector
+def elastic_ips(conn):
+    """
+    Collect EC2 Elastic IPs
+
+    :param conn: boto EC2 connection
+    """
+    for address in conn.get_all_addresses():
+        address_resource = ElasticIP(region=conn.region.name, resource_id=address.public_ip)
+        yield address_resource
+        # an address is usually associated with an instance
+        if address.instance_id:
+            yield Relation(Instance(region=conn.region.name, resource_id=address.instance_id),
+                           address_resource,
+                           dependency=True)
+
+
+@aws_collector
 def images(conn):
     """
     Collect EC2 Amazon Machine Images (AMIs) created by this account
@@ -123,6 +180,10 @@ def instances(conn):
                                      created=dateutil.parser.parse(instance.launch_time),
                                      used=Instance.is_used(instance))
         yield instance_resource
+        if instance.key_name:
+            yield Relation(instance_resource,
+                           KeyPair(region=conn.region.name, resource_id=instance.key_name),
+                           dependency=True)
         # only yield relations for self-owned images
         if instance.image_id in image_ids:
             yield Relation(instance_resource,
