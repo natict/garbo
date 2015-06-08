@@ -80,8 +80,14 @@ def security_groups(conn):
     """
     for group in conn.get_all_security_groups():
         # Fun fact: there is no creation/modification date associated with AWS security groups
-        yield SecurityGroup(region=conn.region.name, resource_id=group.id)
-        # TODO: add cross-group dependency
+        sg_resource = SecurityGroup(region=conn.region.name, resource_id=group.id)
+        yield sg_resource
+        # add cross-group dependency
+        for group_id in {g.group_id for r in group.rules + group.rules_egress for g in r.grants
+                         if g.group_id and g.owner_id == group.owner_id}:
+            yield Relation(sg_resource,
+                           SecurityGroup(region=conn.region.name, resource_id=group_id),
+                           dependency=True)
 
 
 @aws_collector
