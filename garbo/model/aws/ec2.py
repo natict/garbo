@@ -10,7 +10,11 @@ __author__ = 'nati'
 class EC2BaseResource(AbstractResource):
     def __init__(self, region, resource_id, created=None, used=False):
         rid = '/'.join((region, resource_id))
-        super(EC2BaseResource, self).__init__(rid=rid, created=created, used=used)
+        super(EC2BaseResource, self).__init__(provider='AWS',
+                                              rtype=self.__class__.__name__,
+                                              rid=rid,
+                                              created=created,
+                                              used=used)
 
     def cleanup(self):
         # TODO: implement generic EC2 cleanup method

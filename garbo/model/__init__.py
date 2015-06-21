@@ -16,12 +16,14 @@ class AbstractResource(object):
 
     __metaclass__ = ABCMeta
 
-    def __init__(self, rid, created=None, used=False):
+    def __init__(self, provider, rtype, rid, created=None, used=False):
         """
         :param rid: Resource ID, should be the same across multiple discovery engines
         :param created: When was this resource created (datetime)
         :param used: Is this resource being used
         """
+        self.rtype = rtype
+        self.provider = provider
         self.created = created
         self.rid = rid
         self._used = used
@@ -39,8 +41,9 @@ class AbstractResource(object):
         Universal resource ID (across multiple resource types)
         :return:
         """
-        return '{type}://{rid}'.format(type=self.__class__.__name__,
-                                       rid=self.rid)
+        return '{provider}://{type}/{rid}'.format(provider=self.provider,
+                                                  type=self.rtype,
+                                                  rid=self.rid)
 
     def __str__(self):
         return self.urid()

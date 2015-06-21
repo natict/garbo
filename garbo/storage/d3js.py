@@ -40,7 +40,7 @@ class D3JSForce(object):
 
     @classmethod
     def to_group(cls, item):
-        item_type = str(item).split(':')[0]
+        item_type = item.rtype
         if isinstance(item, Instance) and item.used:
             return 0
         elif isinstance(item, Instance):
