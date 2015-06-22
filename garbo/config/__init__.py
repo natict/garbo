@@ -7,6 +7,7 @@ except ImportError:
 import pkgutil
 
 from garbo.config import aws
+from garbo.config import dummy_storage
 
 __author__ = 'nati'
 
