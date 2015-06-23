@@ -59,7 +59,7 @@ def load_balancers(conn):
                                           aws_access_key_id=conn.provider.access_key,
                                           aws_secret_access_key=conn.provider.secret_key)
     for elb in conn.get_all_load_balancers():
-        lb_resource = LoadBalancer(region=conn.region.name, resource_id=elb.dns_name,
+        lb_resource = LoadBalancer(region=conn.region.name, resource_id=elb.name,
                                    created=boto.utils.parse_ts(elb.created_time))
         yield lb_resource
         # security groups relations
@@ -165,6 +165,11 @@ def auto_scaling_groups(conn):
         if asg.launch_config_name:
             yield Relation(asg_resource,
                            LaunchConfiguration(region=conn.region.name, resource_id=asg.launch_config_name),
+                           dependency=True)
+        # Associated Load Balancers
+        for lb_name in asg.load_balancers:
+            yield Relation(LoadBalancer(region=conn.region.name, resource_id=lb_name),
+                           asg_resource,
                            dependency=True)
 
 
