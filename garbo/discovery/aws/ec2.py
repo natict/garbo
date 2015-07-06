@@ -65,7 +65,8 @@ def security_groups(conn):
     """
     for group in conn.get_all_security_groups():
         # Fun fact: there is no creation/modification date associated with AWS security groups
-        sg_resource = SecurityGroup(region=conn.region.name, resource_id=group.id)
+        sg_resource = SecurityGroup(region=conn.region.name, resource_id=group.id,
+                                    cleanup_candidate=SecurityGroup.is_cleanup_candidate(group))
         yield sg_resource
         # add cross-group dependency
         for group_id in {g.group_id for r in group.rules + group.rules_egress for g in r.grants

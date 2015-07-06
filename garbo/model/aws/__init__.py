@@ -39,7 +39,9 @@ class LoadBalancer(AWSBaseResource):
 
 
 class SecurityGroup(AWSBaseResource):
-    pass
+    @classmethod
+    def is_cleanup_candidate(cls, group):
+        return True if group.name != 'default' else False
 
 
 class Instance(AWSBaseResource):
