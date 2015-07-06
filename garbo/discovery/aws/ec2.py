@@ -197,7 +197,8 @@ def instances(conn):
     for instance in conn.get_only_instances():
         instance_resource = Instance(region=conn.region.name, resource_id=instance.id,
                                      created=boto.utils.parse_ts(instance.launch_time),
-                                     used=Instance.is_used(instance))
+                                     used=Instance.is_running(instance),
+                                     cleanup_candidate=Instance.is_cleanup_candidate(instance))
         yield instance_resource
         if instance.key_name:
             yield Relation(instance_resource,

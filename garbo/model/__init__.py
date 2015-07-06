@@ -16,8 +16,9 @@ class AbstractResource(object):
 
     __metaclass__ = ABCMeta
 
-    def __init__(self, provider, rtype, rid, created=None, used=False):
+    def __init__(self, provider, rtype, rid, created=None, used=False, cleanup_candidate=True):
         """
+        :param cleanup_candidate: Should this resource be a cleanup candidate (default: True)
         :param rid: Resource ID, should be the same across multiple discovery engines
         :param created: When was this resource created (datetime)
         :param used: Is this resource being used
@@ -26,6 +27,7 @@ class AbstractResource(object):
         self.provider = provider
         self.created = created
         self.rid = rid
+        self.cleanup_candidate = cleanup_candidate
         self._used = used
 
     """

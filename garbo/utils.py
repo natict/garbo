@@ -28,7 +28,7 @@ def mark_and_sweep(graph, root_resources):
         new_used_resources = expanded_resources - used_resources
 
     # Generate a subset of the original graph containing only unused resources
-    unused_resource_urids = set(resources) - used_resources
+    unused_resource_urids = set([r for r in resources if resources[r].cleanup_candidate]) - used_resources
     logging.info('found the following unused resources: %s', unused_resource_urids)
     unused_graph = [i for i in graph if (isinstance(i, AbstractResource) and i.urid() in unused_resource_urids) or
                     (isinstance(i, Relation) and
