@@ -1,7 +1,6 @@
 """
     This a garbo discovery service for AWS EC2 resources
 """
-import logging
 
 import boto.utils
 import boto.ec2
@@ -9,28 +8,15 @@ import boto.ec2.autoscale
 import boto.ec2.elb
 import boto.exception
 
-from garbo import config
-from garbo.model.aws.ec2 import EBSSnapshot, EBSVolume, Image, Instance, LoadBalancer, SecurityGroup, ElasticIP, \
-    KeyPair, \
-    AutoScalingGroup, LaunchConfiguration
+from garbo.discovery.aws.utils import aws_collector
+from garbo.model.aws import EBSSnapshot, EBSVolume, Image, Instance, LoadBalancer, SecurityGroup, ElasticIP, \
+    KeyPair, AutoScalingGroup, LaunchConfiguration
 from garbo.model import Relation
 
 __author__ = 'nati'
 
-_resource_collectors = set()
 
-
-def aws_collector(f):
-    """
-    Collect AWS collectors to a global module set
-
-    :param f:  AWS collector function, getting boto EC2 connection and yielding resources and/or relations
-    """
-    _resource_collectors.add(f)
-    return f
-
-
-@aws_collector
+@aws_collector()
 def snapshots(conn):
     """
     Collect EC2 EBS Snapshots created by this account
@@ -47,17 +33,13 @@ def snapshots(conn):
                            EBSVolume(region=conn.region.name, resource_id=snapshot.volume_id))
 
 
-@aws_collector
+@aws_collector(conn_obj=boto.ec2.elb.connect_to_region)
 def load_balancers(conn):
     """
     Collect EC2 Elastic Load Balances (ELBs)
 
     :param conn: boto EC2 connection
     """
-    # Convert EC2 connection to ELB connection
-    conn = boto.ec2.elb.connect_to_region(conn.region.name,
-                                          aws_access_key_id=conn.provider.access_key,
-                                          aws_secret_access_key=conn.provider.secret_key)
     for elb in conn.get_all_load_balancers():
         lb_resource = LoadBalancer(region=conn.region.name, resource_id=elb.name,
                                    created=boto.utils.parse_ts(elb.created_time))
@@ -74,7 +56,7 @@ def load_balancers(conn):
                            dependency=True)
 
 
-@aws_collector
+@aws_collector()
 def security_groups(conn):
     """
     Collect EC2 Security Groups
@@ -93,7 +75,7 @@ def security_groups(conn):
                            dependency=True)
 
 
-@aws_collector
+@aws_collector()
 def key_pairs(conn):
     """
     Collect EC2 Key Pairs
@@ -104,13 +86,7 @@ def key_pairs(conn):
         yield KeyPair(region=conn.region.name, resource_id=key_pair.name)
 
 
-def _ec2_to_autoscale(conn):
-    return boto.ec2.autoscale.connect_to_region(conn.region.name,
-                                                aws_access_key_id=conn.provider.access_key,
-                                                aws_secret_access_key=conn.provider.secret_key)
-
-
-@aws_collector
+@aws_collector()
 def launch_configurations(conn):
     """
     Collect EC2 Elastic IPs
@@ -119,8 +95,10 @@ def launch_configurations(conn):
     """
     # using EC2 connection to fetch self owned image ids
     image_ids = [i.id for i in conn.get_all_images(owners='self')]
-
-    conn = _ec2_to_autoscale(conn)
+    # switching to autoscale connection to fetch Launch Configurations
+    conn = boto.ec2.autoscale.connect_to_region(conn.region.name,
+                                                aws_access_key_id=conn.provider.access_key,
+                                                aws_secret_access_key=conn.provider.secret_key)
     for lc in conn.get_all_launch_configurations():
         # Fun Fact: LaunchConfiguration created_time is not an ISO 8601, but a parsed datetime
         lc_resource = LaunchConfiguration(region=conn.region.name, resource_id=lc.name,
@@ -143,15 +121,13 @@ def launch_configurations(conn):
                            dependency=True)
 
 
-@aws_collector
+@aws_collector(conn_obj=boto.ec2.autoscale.connect_to_region)
 def auto_scaling_groups(conn):
     """
     Collect EC2 Elastic IPs
 
     :param conn: boto EC2 connection
     """
-    conn = _ec2_to_autoscale(conn)
-
     for asg in conn.get_all_groups():
         asg_resource = AutoScalingGroup(region=conn.region.name, resource_id=asg.name,
                                         created=boto.utils.parse_ts(asg.created_time))
@@ -173,7 +149,7 @@ def auto_scaling_groups(conn):
                            dependency=True)
 
 
-@aws_collector
+@aws_collector()
 def elastic_ips(conn):
     """
     Collect EC2 Elastic IPs
@@ -190,7 +166,7 @@ def elastic_ips(conn):
                            dependency=True)
 
 
-@aws_collector
+@aws_collector()
 def images(conn):
     """
     Collect EC2 Amazon Machine Images (AMIs) created by this account
@@ -210,7 +186,7 @@ def images(conn):
                            dependency=True)
 
 
-@aws_collector
+@aws_collector()
 def instances(conn):
     """
     Collect EC2 Instances
@@ -238,7 +214,7 @@ def instances(conn):
                            dependency=True)
 
 
-@aws_collector
+@aws_collector()
 def ebs_volumes(conn):
     """
     Collect EC2 EBS Volumes
@@ -260,29 +236,3 @@ def ebs_volumes(conn):
         if volume.snapshot_id in snapshot_ids:
             yield Relation(ebs_volume_resource,
                            EBSSnapshot(region=conn.region.name, resource_id=volume.snapshot_id))
-
-
-def collect_all(aws_access_key=None, aws_secret_key=None):
-    """
-    Yield all EC2 resources and relations associated with an AWS account
-
-    :param aws_access_key:
-    :param aws_secret_key:
-    """
-    aws_access_key = aws_access_key or config.aws.access_key
-    aws_secret_key = aws_secret_key or config.aws.secret_access_key
-
-    regions = config.aws.regions or (r.name for r in boto.ec2.regions())
-    for region in regions:
-        conn = boto.ec2.connect_to_region(region,
-                                          aws_access_key_id=aws_access_key,
-                                          aws_secret_access_key=aws_secret_key)
-        logging.info('running AWS EC2 collectors on %s', region)
-        for collector in _resource_collectors:
-            logging.info('collecting %s', collector.__name__)
-            try:
-                for item in collector(conn):
-                    yield item
-            except boto.exception.BotoServerError as e:
-                logging.warn('unable to run collector %s for region %s: %s',
-                             collector.__name__, region, e.message)

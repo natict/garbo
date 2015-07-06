@@ -8,7 +8,7 @@ import logging
 import yaml
 
 from garbo import config, utils
-from garbo.discovery.aws import ec2
+from garbo.discovery import aws
 from garbo.storage.dummy import dump_graph, load_graph
 from garbo.storage.d3js import D3JSForce
 
@@ -46,7 +46,7 @@ def main():
 
     if args.discovery:
         # Perform discovery into selected storage
-        graph = list(ec2.collect_all())
+        graph = list(aws.collect_all())
         dump_graph(graph)
     else:
         # Read resources and relations from storage

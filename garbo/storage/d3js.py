@@ -1,7 +1,7 @@
 import json
 import logging
 from garbo.model import Relation, AbstractResource
-from garbo.model.aws.ec2 import Instance
+from garbo.model.aws import Instance
 
 __author__ = 'nati'
 
@@ -36,7 +36,7 @@ class D3JSForce(object):
             json.dump({"nodes": nodes, "links": links}, file_out, indent=2)
 
     TYPE_TO_GROUP = ['SecurityGroup', 'LoadBalancer', 'EBSVolume', 'EBSSnapshot', 'Image', 'ElasticIP',
-                     'KeyPair', 'LaunchConfiguration', 'AutoScalingGroup']
+                     'KeyPair', 'LaunchConfiguration', 'AutoScalingGroup', 'CacheCluster']
 
     @classmethod
     def to_group(cls, item):
