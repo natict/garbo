@@ -19,13 +19,13 @@ def _get_parsed_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--applications', '-a', default=False,
-                        help='a YAML file containing the name and root resources of your application')
+                        help='YAML file containing Core Resources per application')
 
     parser.add_argument('--discovery', '-d', action='store_true', default=False,
-                        help='should garbo perform a discovery, or just use stored graph')
+                        help='Perform a discovery (don\'t use stored graph). default: False')
 
     parser.add_argument('--gen-d3js', '-g', action='store_true', default=False,
-                        help='should garbo generate a json file for D3JS Directed Force Graph')
+                        help='Generate a json file for D3JS Directed Force Graph. default: False')
 
     return parser.parse_args()
 
