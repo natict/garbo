@@ -1,0 +1,292 @@
+---
+ec2:
+  collections:
+    classic_addresses:
+      type: ClassicAddress
+      identifier: public_ip
+      references:
+        instance_id:
+          type: Instance
+        network_interface_id:
+          type: NetworkInterface
+    dhcp_options_sets:
+      type: DhcpOptions
+    images:
+      type: Image
+      iterator:
+        filter:
+          Owners:
+            - self
+      created: creation_date
+      properties:
+        - name
+        - public
+      references:
+        block_device_mappings:
+          type: Snapshot
+          identifier: Ebs.SnapshotId
+    instances:
+      type: Instance
+      created: launch_time
+      properties:
+        - private_dns_name
+        - private_ip_address
+        - public_dns_name
+        - public_ip_address
+        - spot_instance_request_id
+      references:
+        classic_address:
+          type: ClassicAddress
+          identifier: public_ip
+        image:
+          type: Image
+        key_pair:
+          type: KeyPair  # actually KeyPairInfo
+          identifier: name
+        network_interfaces:
+          type: NetworkInterface
+        placement_group:
+          type: PlacementGroup
+          identifier: name
+        subnet:
+          type: Subnet
+        vpc:
+          type: Vpc
+        security_groups:
+          type: SecurityGroup
+          identifier: GroupId
+        block_device_mappings:
+          type: Volume
+          identifier: Ebs.VolumeId
+        iam_instance_profile:
+          type: iam.InstanceProfile
+          identifier: Id
+    internet_gateways:
+      type: InternetGateway
+    key_pairs:
+      type: KeyPair
+      identifier: name
+    network_acls:
+      type: NetworkAcl
+      references:
+        vpc:
+          type: Vpc
+    network_interfaces:
+      type: NetworkInterface
+      references:
+        association:
+          type: VpcAddress  # actually NetworkInterfaceAssociation
+          identifier: address.allocation_id
+        subnet:
+          type: Subnet
+        vpc:
+          type: Vpc
+        groups:
+          type: SecurityGroup
+          identifier: GroupId
+    placement_groups:
+      type: PlacementGroup
+      identifier: name
+    route_tables:
+      type: RouteTable
+      references:
+        vpc:
+          type: Vpc
+    security_groups:
+      type: SecurityGroup
+      properties:
+        - group_name
+        - description
+      references:
+        ip_permissions:
+          type: SecurityGroup
+          reference_path: UserIdGroupPairs
+          identifier: GroupId
+        ip_permissions_egress:
+          type: SecurityGroup
+          reference_path: UserIdGroupPairs
+          identifier: GroupId
+    snapshots:
+      type: Snapshot
+      iterator:
+        filter:
+          OwnerIds:
+            - self
+      created: start_time
+      references:
+        # TODO: Add KMS references
+        volume:
+          type: Volume
+    subnets:
+      type: Subnet
+      references:
+        vpc:
+          type: Vpc
+    volumes:
+      type: Volume
+      created: create_time
+      references:
+        # TODO: Add KMS references
+        snapshot_id:
+          type: Snapshot
+    vpc_addresses:
+      type: VpcAddress
+      identifier: allocation_id
+    vpc_peering_connections:
+      type: VpcPeeringConnection
+      references:
+        accepter_vpc:
+          type: Vpc
+        requester_vpc:
+          type: Vpc
+    vpcs:
+      type: Vpc
+      references:
+        dhcp_options:
+          type: DhcpOptions
+iam:
+  regional: False
+  collections:
+    groups:
+      type: Group
+      identifier: name
+      properties:
+        - group_name
+        - group_id
+      references:
+        attached_policies:
+          type: Policy
+          identifier: arn
+        # TODO: support GroupPolicy (and multi-field identifiers)
+        users:
+          type: User
+          identifier: name
+    instance_profiles:
+      type: InstanceProfile
+      identifier: name
+      references:
+        roles:
+          type: Role
+          identifier: name
+    policies:
+      type: Policy
+      identifier: arn
+      iterator:
+        filter:
+          Scope: Local
+      properties:
+        - policy_name
+        - description
+      references:
+        attached_groups:
+          type: Group
+          identifier: name
+        attached_roles:
+          type: Role
+          identifier: name
+        attached_users:
+          type: User
+          identifier: name
+    roles:
+      type: Role
+      identifier: name
+      references:
+        attached_policies:
+          type: Policy
+          identifier: arn
+        instance_profiles:
+          type: InstanceProfile
+          identifier: name
+        # TODO: support RolePolicy (and multi-field identifiers)
+    saml_providers:
+      type: SamlProvider
+      identifier: arn
+    server_certificates:
+      type: ServerCertificate
+      identifier: name
+      properties:
+        - server_certificate_metadata
+    users:
+      type: User
+      identifier: name
+      references:
+        attached_policies:
+          type: Policy
+          identifier: arn
+        groups:
+          type: Group
+          identifier: name
+        # TODO: support MfaDevice (and multi-field identifiers)
+        # TODO: support UserPolicy (and multi-field identifiers)
+        # TODO: support SigningCertificate (and multi-field identifiers)
+    virtual_mfa_devices:
+      type: VirtualMfaDevice
+      identifier: serial_number
+      created: enable_date
+      references:
+        user:
+          type: User
+          identifier: name
+s3:
+  regional: False
+  collections:
+    buckets:
+      type: Bucket
+      identifier: name
+      created: creation_date
+sns:
+  collections:
+    platform_applications:
+      type: PlatformApplication
+      identifier: arn
+      references:
+        endpoints:
+          type: PlatformEndpoint
+          identifier: arn
+    subscriptions:
+      type: Subscription
+      identifier: arn
+    topics:
+      type: Topic
+      identifier: arn
+      references:
+        subscriptions:
+          type: Subscription
+          identifier: arn
+sqs:
+  collections:
+    queues:
+      type: Queue
+      identifier: url
+      references:
+        dead_letter_source_queues:
+          type: Queue
+          identifier: url
+elb:
+  paginators:
+    describe_load_balancers:
+      resources_key: LoadBalancerDescriptions
+autoscaling:
+  paginators:
+    describe_auto_scaling_groups:
+      resources_key: AutoScalingGroups
+    describe_auto_scaling_instances:
+      resources_key: AutoScalingInstances
+    describe_launch_configurations:
+      resources_key: LaunchConfigurations
+    describe_scheduled_actions:
+      resources_key: ScheduledUpdateGroupActions
+elasticache:
+  paginators:
+    describe_cache_clusters:
+      resources_key: CacheClusters
+    describe_cache_parameter_groups:
+      resources_key: CacheParameterGroups
+    describe_cache_subnet_groups:
+      resources_key: CacheSubnetGroups
+    describe_replication_groups:
+      resources_key: ReplicationGroups
+    describe_reserved_cache_nodes:
+      resources_key: ReservedCacheNodes
+    describe_snapshots:
+      resources_key: Snapshots
