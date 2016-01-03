@@ -50,11 +50,11 @@ def _referenced_resources(references_map, src_resource, service_name):
     references_map = references_map or {}
     for reference_name, reference_config in references_map.iteritems():
         resources = (rget(src_resource, reference_name) if isinstance(src_resource, dict) else
-                           rgetattr(src_resource, reference_name, '')) or []
+                     rgetattr(src_resource, reference_name, '')) or []
         if 'reference_path' in reference_config:
             # Support references of type [{'reference_path': [{'ref_id_key':'ref_id'}, {}]}, {}, ...]
             resources = [rget(r, reference_config['reference_path']) for r in
-                               resources if r]
+                         resources if r]
         elif isinstance(resources, CollectionManager):
             resources = resources.all()
         elif not isinstance(resources, list):
