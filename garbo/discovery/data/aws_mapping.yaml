@@ -25,6 +25,7 @@ ec2:
         block_device_mappings:
           type: Snapshot
           identifier: Ebs.SnapshotId
+          ignore_missing: True
     instances:
       type: Instance
       created: launch_time
@@ -97,7 +98,6 @@ ec2:
       type: SecurityGroup
       properties:
         - group_name
-        - description
       references:
         ip_permissions:
           type: SecurityGroup
@@ -177,7 +177,6 @@ iam:
           Scope: Local
       properties:
         - policy_name
-        - description
       references:
         attached_groups:
           type: Group
@@ -269,7 +268,6 @@ elb:
       resources_key: LoadBalancerDescriptions
       type: LoadBalancer
       identifier: LoadBalancerName
-      created: CreatedTime
       properties:
         - DNSName
         - CanonicalHostedZoneName
@@ -294,11 +292,8 @@ autoscaling:
       resources_key: AutoScalingGroups
       type: AutoScalingGroup
       identifier: AutoScalingGroupName
-      created: CreatedTime
       properties:
         - AutoScalingGroupARN
-        - Status
-        - Tags
       references:
         LaunchConfigurationName:
           type: LaunchConfiguration
@@ -315,7 +310,6 @@ autoscaling:
       resources_key: LaunchConfigurations
       type: LaunchConfiguration
       identifier: LaunchConfigurationName
-      created: CreatedTime
       properties:
         - LaunchConfigurationARN
         - InstanceType
@@ -364,7 +358,6 @@ elasticache:
       identifier: CacheParameterGroupName
       properties:
         - CacheParameterGroupFamily
-        - Description
     describe_cache_subnet_groups:
       resources_key: CacheSubnetGroups
       type: SubnetGroup
@@ -381,9 +374,6 @@ elasticache:
       resources_key: ReplicationGroups
       type: ReplicationGroup
       identifier: ReplicationGroupId
-      properties:
-        - Description
-        - Status
       references:
         MemberClusters:
           type: CacheCluster

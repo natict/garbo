@@ -2,120 +2,102 @@
     Fetch AWS resources and relations
 """
 
-import garbo.config
-import os
-from collections import namedtuple
-from functools import partial
 import logging
+import os
 
 import boto3
 from boto3.resources.collection import CollectionManager
-from funcy import first
-import yaml
 from botocore.exceptions import ClientError
+from botocore.utils import parse_to_aware_datetime
+import yaml
+
+import garbo.config
+from garbo.model import Resource, Relation
+from garbo.utils import rgetattr, rget, squash_list
 
 __author__ = 'nati'
 
-AWS_BASE_TYPE = 'aws'
-AWS_RESOURCE_DEFAULT_PROPERTIES = ['tags', 'state']
-Resource = namedtuple('Resource', ['type', 'id', 'created', 'properties'])
-Relation = namedtuple('Relation', ['src_type', 'src_id', 'dst_type', 'dst_id'])
+AWS_RESOURCE_DEFAULT_PROPERTIES = ['tags', 'state', 'description', 'Description', 'Status', 'Tags']
 
 
-def _get_collection_iterator(collection, iterator):
-    if iterator == 'all':
-        return collection.all
-    elif isinstance(iterator, dict):
-        iterator_fn = first(iterator)
-        iterator_kwargs = iterator[iterator_fn] or {}
-        return partial(getattr(collection, iterator_fn), **iterator_kwargs)
-    else:
-        raise NotImplemented('iterator must be "all" or dict of a function and kwargs (iterator=%s)' % str(iterator))
+class AWSResource(Resource):
+    AWS_TYPE_BASE = 'aws'
+    AWS_TYPE_SEP = '.'
+
+    def __init__(self, service, type, id, created=None, properties=None):
+        aws_type = AWSResource.AWS_TYPE_SEP.join([AWSResource.AWS_TYPE_BASE] +
+                                                 ([type] if AWSResource.AWS_TYPE_SEP in type else [service, type]))
+        created = parse_to_aware_datetime(created) if created else None  # normalize creation date
+        properties = {k: v for k, v in (properties or {}).iteritems() if v}  # filter empty properties
+        super(AWSResource, self).__init__(aws_type, id, created, properties)
 
 
-def rgetattr(obj, name, default=None):
-    """
-    recursive getattr() implementation
-    """
-    assert isinstance(name, basestring)
-    lname, _, rname = name.partition('.')
-    try:
-        if rname:
-            return rgetattr(getattr(obj, lname), rname, default)
-        else:
-            return getattr(obj, lname, default)
-    except AttributeError as e:
-        if default is None:
-            raise e
-        else:
-            return default
+class AWSRelation(Relation):
+    pass
 
 
-def rget(d, key, default=None):
-    """
-    recursive dict.get() implementation
-    """
-    assert isinstance(key, basestring)
-    lkey, _, rkey = key.partition('.')
-    if isinstance(d, dict):
-        if rkey:
-            return rget(d.get(lkey), rkey, default)
-        else:
-            return d.get(lkey, default)
-    else:
-        return default
+def _resources_from_collection(collection, iterator_config=None):
+    iterator_config = iterator_config or {'all': {}}
+    if not isinstance(iterator_config, dict):
+        raise NotImplemented('iterator must be dict of a function name and kwargs (iterator=%s)' % str(iterator_config))
+    for iterator_fn, iterator_kwargs in iterator_config.iteritems():
+        iterator_kwargs = iterator_kwargs or {}
+        for resource in getattr(collection, iterator_fn)(**iterator_kwargs):
+            yield resource
 
 
-def squash_list(l):
-    ret = []
-    for e in l:
-        ret.extend(squash_list(e) if isinstance(e, list) else [e])
-    return ret
+def _referenced_resources(references_map, src_resource, service_name):
+    references_map = references_map or {}
+    for reference_name, reference_config in references_map.iteritems():
+        resources = (rget(src_resource, reference_name) if isinstance(src_resource, dict) else
+                           rgetattr(src_resource, reference_name, '')) or []
+        if 'reference_path' in reference_config:
+            # Support references of type [{'reference_path': [{'ref_id_key':'ref_id'}, {}]}, {}, ...]
+            resources = [rget(r, reference_config['reference_path']) for r in
+                               resources if r]
+        elif isinstance(resources, CollectionManager):
+            resources = resources.all()
+        elif not isinstance(resources, list):
+            resources = [resources]
+        resource_type = reference_config.get('type')
+        id_attribute = reference_config.get('identifier', 'id')
+        for resource in squash_list(resources):
+            resource_id = resource if isinstance(resource, basestring) else \
+                rget(resource, id_attribute) if isinstance(resource, dict) else \
+                rgetattr(resource, id_attribute)
+            if all((resource_type, resource_id)):
+                yield AWSResource(service=service_name,
+                                  type=resource_type,
+                                  id=resource_id)
+            elif not reference_config.get('ignore_missing', False):
+                logging.warn('Referenced resource type or identifier is missing '
+                             '(type=%s, id=%s, resource=%s)',
+                             resource_type, resource_id, resource)
 
 
 def _extract_collections(session, service_name, collections):
     if collections:
         service = session.resource(service_name)
         for collection_name, collection_config in collections.iteritems():
-            collection_iterator = _get_collection_iterator(getattr(service, collection_name),
-                                                           collection_config.get('iterator', 'all'))
-            properties = AWS_RESOURCE_DEFAULT_PROPERTIES + collection_config.get('properties', [])
+            collection = getattr(service, collection_name)
             resource_type = collection_config.get('type')
-            for resource in collection_iterator():
-                # TODO: replace the namedtuple with a AWSResource class, apply AWS specific logic there (type prefix, date convertion etc.)
+            resource_properties = AWS_RESOURCE_DEFAULT_PROPERTIES + collection_config.get('properties', [])
+            resource_created_attr = collection_config.get('created', 'create_date')
+            for resource in _resources_from_collection(collection, collection_config.get('iterator')):
                 resource_id = getattr(resource, collection_config.get('identifier', 'id'))
-                if resource_type and resource_id:
-                    print Resource(type=resource_type,
-                                   id=resource_id,
-                                   created=getattr(resource, collection_config.get('created', 'create_date'), 0),
-                                   properties={p: getattr(resource, p) for p in properties if getattr(resource, p, '')})
-                    for reference_name, reference_config in collection_config.get('references', {}).iteritems():
-                        reference_resources = getattr(resource, reference_name, None) or []
-                        if 'reference_path' in reference_config:
-                            reference_resources = [rget(r, reference_config['reference_path']) for r in
-                                                   reference_resources if r]
-                        elif isinstance(reference_resources, CollectionManager):
-                            reference_resources = reference_resources.all()
-                        elif not isinstance(reference_resources, list):
-                            reference_resources = [reference_resources]
-                        for other_resource in squash_list(reference_resources):
-                            other_resource_type = reference_config.get('type')
-                            id_attribute = reference_config.get('identifier', 'id')
-                            other_resource_id = other_resource if isinstance(other_resource, basestring) else \
-                                rget(other_resource, id_attribute) if isinstance(other_resource, dict) else \
-                                    rgetattr(other_resource, id_attribute)
-                            if other_resource_type and other_resource_id:
-                                print Relation(src_type=resource_type,
-                                               src_id=resource_id,
-                                               dst_type=other_resource_type,
-                                               dst_id=other_resource_id)
-                            elif not reference_config.get('ignore_missing', False):
-                                logging.warn('Referenced resource type or identifier is missing '
-                                             '(type=%s, id=%s, resource=%s)',
-                                             other_resource_type, other_resource_id, other_resource)
-                else:
+                if not all((resource_type, resource_id)):
                     logging.warn('Resource type or identifier is missing (type=%s, id=%s, resource=%s)',
                                  resource_type, resource_id, resource)
+                    continue
+                aws_resource = AWSResource(service=service_name,
+                                           type=resource_type,
+                                           id=resource_id,
+                                           created=getattr(resource, resource_created_attr, ''),
+                                           properties={p: getattr(resource, p, '') for p in resource_properties})
+                print aws_resource
+                for referenced_resource in _referenced_resources(collection_config.get('references'),
+                                                                 resource, service_name):
+                    print AWSRelation(src_resource=aws_resource, dst_resource=referenced_resource)
 
 
 def _resources_from_paginator(paginator, resources_key):
@@ -133,36 +115,29 @@ def _extract_paginators(session, service_name, paginators):
         for paginator_name, pagintor_config in paginators.iteritems():
             paginator = client.get_paginator(paginator_name)
             resource_type = pagintor_config.get('type')
-            resource_properties = pagintor_config.get('properties', [])  # TODO
+            resource_properties = AWS_RESOURCE_DEFAULT_PROPERTIES + pagintor_config.get('properties', [])
             for resource in _resources_from_paginator(paginator, pagintor_config.get('resources_key')):
                 resource_id = resource.get(pagintor_config.get('identifier', 'id'))
-                print Resource(type=resource_type,
-                               id=resource_id,
-                               created=resource.get(pagintor_config.get('created', 'create_date'), 0),
-                               properties={p: rget(resource, p) for p in resource_properties if rget(resource, p)})
-                for reference_name, reference_config in pagintor_config.get('references', {}).iteritems():
-                    reference_resources = rget(resource, reference_name) or []
-                    if not isinstance(reference_resources, list):
-                        reference_resources = [reference_resources]
-                    for other_resource in squash_list(reference_resources):
-                        other_resource_type = reference_config.get('type')
-                        id_attribute = reference_config.get('identifier', 'id')
-                        other_resource_id = other_resource if isinstance(other_resource, basestring) else \
-                            rget(other_resource, id_attribute)
-                        if other_resource_type and other_resource_id:
-                            print Relation(src_type=resource_type,
-                                           src_id=resource_id,
-                                           dst_type=other_resource_type,
-                                           dst_id=other_resource_id)
-                        elif not reference_config.get('ignore_missing', False):
-                            logging.warn('Referenced resource type or identifier is missing '
-                                         '(type=%s, id=%s, resource=%s)',
-                                         other_resource_type, other_resource_id, other_resource)
+                if not all((resource_type, resource_id)):
+                    logging.warn('Resource type or identifier is missing (type=%s, id=%s, resource=%s)',
+                                 resource_type, resource_id, resource)
+                    continue
+                aws_resource = AWSResource(service=service_name,
+                                           type=resource_type,
+                                           id=resource_id,
+                                           created=resource.get(pagintor_config.get('created', 'CreatedTime'), 0),
+                                           properties={p: rget(resource, p) for p in resource_properties})
+                print aws_resource
+                for referenced_resource in _referenced_resources(pagintor_config.get('references'),
+                                                                 resource, service_name):
+                    print AWSRelation(src_resource=aws_resource, dst_resource=referenced_resource)
 
 
 def extract_all(regions=None):
     """
     Extract AWS Resources and Relations
+    :type regions: list
+    :param regions: list of region names to extract from
     """
     aws_mapping = yaml.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'aws_mapping.yaml')))
     regions = regions or garbo.config.aws.regions

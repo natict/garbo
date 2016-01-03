@@ -1,38 +1,41 @@
-from collections import defaultdict
-import logging
-
-from garbo.model import AbstractResource, Relation
-
 __author__ = 'nati'
 
 
-def mark_and_sweep(graph, root_resources):
+def rgetattr(obj, name, default=None):
     """
-    Go over a directed graph of resources, starting from given set of roots, and yield non-connected resources
-    :param graph:
-    :param root_resources:
-    :return:
+    recursive getattr() implementation
     """
-    resources = {i.urid(): i for i in graph if isinstance(i, AbstractResource)}
-    relations = defaultdict(set)
-    for r in (i for i in graph if isinstance(i, Relation) and i.dependency):
-        relations[r.source].add(r.target)
-    used_resources = set()
-    new_used_resources = {r for r in root_resources if r in resources}  # TODO: add newly created resources as roots
+    assert isinstance(name, basestring)
+    lname, _, rname = name.partition('.')
+    try:
+        if rname:
+            return rgetattr(getattr(obj, lname), rname, default)
+        else:
+            return getattr(obj, lname, default)
+    except AttributeError as e:
+        if default is None:
+            raise e
+        else:
+            return default
 
-    while new_used_resources:
-        used_resources |= new_used_resources
-        expanded_resources = {target for urid in new_used_resources
-                              for target in relations.get(urid, [])
-                              if target in resources}
-        new_used_resources = expanded_resources - used_resources
 
-    # Generate a subset of the original graph containing only unused resources
-    unused_resource_urids = set([r for r in resources if resources[r].cleanup_candidate]) - used_resources
-    logging.info('found the following unused resources: %s', unused_resource_urids)
-    unused_graph = [i for i in graph if (isinstance(i, AbstractResource) and i.urid() in unused_resource_urids) or
-                    (isinstance(i, Relation) and
-                     i.source in unused_resource_urids and
-                     i.target in unused_resource_urids)]
+def rget(d, key, default=None):
+    """
+    recursive dict.get() implementation
+    """
+    assert isinstance(key, basestring)
+    lkey, _, rkey = key.partition('.')
+    if isinstance(d, dict):
+        if rkey:
+            return rget(d.get(lkey), rkey, default)
+        else:
+            return d.get(lkey, default)
+    else:
+        return default
 
-    return unused_graph
+
+def squash_list(l):
+    ret = []
+    for e in l:
+        ret.extend(squash_list(e) if isinstance(e, list) else [e])
+    return ret
