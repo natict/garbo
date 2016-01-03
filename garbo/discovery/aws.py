@@ -80,9 +80,9 @@ def _extract_collections(session, service_name, collections):
             collection_iterator = _get_collection_iterator(getattr(service, collection_name),
                                                            collection_config.get('iterator', 'all'))
             properties = AWS_RESOURCE_DEFAULT_PROPERTIES + collection_config.get('properties', [])
+            resource_type = collection_config.get('type')
             for resource in collection_iterator():
                 # TODO: replace the namedtuple with a AWSResource class, apply AWS specific logic there (type prefix, date convertion etc.)
-                resource_type = collection_config.get('type')
                 resource_id = getattr(resource, collection_config.get('identifier', 'id'))
                 if resource_type and resource_id:
                     print Resource(type=resource_type,
@@ -92,7 +92,8 @@ def _extract_collections(session, service_name, collections):
                     for reference_name, reference_config in collection_config.get('references', {}).iteritems():
                         reference_resources = getattr(resource, reference_name, None) or []
                         if 'reference_path' in reference_config:
-                            reference_resources = [rget(r, reference_config['reference_path']) for r in reference_resources if r]
+                            reference_resources = [rget(r, reference_config['reference_path']) for r in
+                                                   reference_resources if r]
                         elif isinstance(reference_resources, CollectionManager):
                             reference_resources = reference_resources.all()
                         elif not isinstance(reference_resources, list):
@@ -102,13 +103,13 @@ def _extract_collections(session, service_name, collections):
                             id_attribute = reference_config.get('identifier', 'id')
                             other_resource_id = other_resource if isinstance(other_resource, basestring) else \
                                 rget(other_resource, id_attribute) if isinstance(other_resource, dict) else \
-                                rgetattr(other_resource, id_attribute)
+                                    rgetattr(other_resource, id_attribute)
                             if other_resource_type and other_resource_id:
                                 print Relation(src_type=resource_type,
                                                src_id=resource_id,
                                                dst_type=other_resource_type,
                                                dst_id=other_resource_id)
-                            else:
+                            elif not reference_config.get('ignore_missing', False):
                                 logging.warn('Referenced resource type or identifier is missing '
                                              '(type=%s, id=%s, resource=%s)',
                                              other_resource_type, other_resource_id, other_resource)
@@ -117,17 +118,46 @@ def _extract_collections(session, service_name, collections):
                                  resource_type, resource_id, resource)
 
 
+def _resources_from_paginator(paginator, resources_key):
+    try:
+        for page in paginator.paginate():
+            for resource in page.get(resources_key):
+                yield resource
+    except ClientError:
+        logging.exception('Unable to use paginator %s', paginator)
+
+
 def _extract_paginators(session, service_name, paginators):
     if paginators:
         client = session.client(service_name)
         for paginator_name, pagintor_config in paginators.iteritems():
             paginator = client.get_paginator(paginator_name)
-            try:
-                for page in paginator.paginate():
-                    for resource in page.get(pagintor_config.get('resources_key')):
-                        print resource
-            except ClientError:
-                logging.exception('Unable to use paginator %s', paginator_name)
+            resource_type = pagintor_config.get('type')
+            resource_properties = pagintor_config.get('properties', [])  # TODO
+            for resource in _resources_from_paginator(paginator, pagintor_config.get('resources_key')):
+                resource_id = resource.get(pagintor_config.get('identifier', 'id'))
+                print Resource(type=resource_type,
+                               id=resource_id,
+                               created=resource.get(pagintor_config.get('created', 'create_date'), 0),
+                               properties={p: rget(resource, p) for p in resource_properties if rget(resource, p)})
+                for reference_name, reference_config in pagintor_config.get('references', {}).iteritems():
+                    reference_resources = rget(resource, reference_name) or []
+                    if not isinstance(reference_resources, list):
+                        reference_resources = [reference_resources]
+                    for other_resource in squash_list(reference_resources):
+                        other_resource_type = reference_config.get('type')
+                        id_attribute = reference_config.get('identifier', 'id')
+                        other_resource_id = other_resource if isinstance(other_resource, basestring) else \
+                            rget(other_resource, id_attribute)
+                        if other_resource_type and other_resource_id:
+                            print Relation(src_type=resource_type,
+                                           src_id=resource_id,
+                                           dst_type=other_resource_type,
+                                           dst_id=other_resource_id)
+                        elif not reference_config.get('ignore_missing', False):
+                            logging.warn('Referenced resource type or identifier is missing '
+                                         '(type=%s, id=%s, resource=%s)',
+                                         other_resource_type, other_resource_id, other_resource)
 
 
 def extract_all(regions=None):

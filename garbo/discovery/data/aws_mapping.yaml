@@ -48,6 +48,7 @@ ec2:
         placement_group:
           type: PlacementGroup
           identifier: name
+          ignore_missing: True
         subnet:
           type: Subnet
         vpc:
@@ -266,27 +267,136 @@ elb:
   paginators:
     describe_load_balancers:
       resources_key: LoadBalancerDescriptions
+      type: LoadBalancer
+      identifier: LoadBalancerName
+      created: CreatedTime
+      properties:
+        - DNSName
+        - CanonicalHostedZoneName
+        - CanonicalHostedZoneNameID
+      references:
+        VPCId:
+          type: ec2.Vpc
+        SecurityGroups:
+          type: ec2.SecurityGroup
+        Instances:
+          type: ec2.Instance
+          identifier: InstanceId
+        Subnets:
+          type: ec2.Subnet
+        ListenerDescriptions:
+          type: iam.ServerCertificate
+          identifier: Listener.SSLCertificateId
+          ignore_missing: True
 autoscaling:
   paginators:
     describe_auto_scaling_groups:
       resources_key: AutoScalingGroups
-    describe_auto_scaling_instances:
-      resources_key: AutoScalingInstances
+      type: AutoScalingGroup
+      identifier: AutoScalingGroupName
+      created: CreatedTime
+      properties:
+        - AutoScalingGroupARN
+        - Status
+        - Tags
+      references:
+        LaunchConfigurationName:
+          type: LaunchConfiguration
+        LoadBalancerNames:
+          type: elb.LoadBalancer
+        Instances:
+          type: ec2.Instance
+          identifier: InstanceId
+        PlacementGroup:
+          type: ec2.PlacementGroup
+        VPCZoneIdentifier:
+          type: ec2.Subnet
     describe_launch_configurations:
       resources_key: LaunchConfigurations
-    describe_scheduled_actions:
-      resources_key: ScheduledUpdateGroupActions
+      type: LaunchConfiguration
+      identifier: LaunchConfigurationName
+      created: CreatedTime
+      properties:
+        - LaunchConfigurationARN
+        - InstanceType
+      references:
+        ImageId:
+          type: ec2.Image
+        KeyName:
+          type: ec2.KeyPair
+        SecurityGroups:
+          type: ec2.SecurityGroup
+        BlockDeviceMappings:
+          type: ec2.Snapshot
+          identifier: Ebs.SnapshotId
+          ignore_missing: True
 elasticache:
   paginators:
     describe_cache_clusters:
       resources_key: CacheClusters
+      type: CacheCluster
+      identifier: CacheClusterId
+      created: CacheClusterCreateTime
+      properties:
+        - Engine
+        - EngineVersion
+        - CacheClusterStatus
+        - ConfigurationEndpoint.Address
+        - ConfigurationEndpoint.Port
+      references:
+        SecurityGroups:
+          type: ec2.SecurityGroup
+          identifier: SecurityGroupId
+        ReplicationGroupId:
+          type: ReplicationGroup
+        NotificationConfiguration:
+          type: sns.Topic
+          identifier: TopicArn
+        CacheParameterGroup:
+          type: ParameterGroup
+          identifier: CacheParameterGroupName
+        CacheSubnetGroupName:
+          type: SubnetGroup
+        # TODO: support CacheNodes (and multi-field identifiers)
     describe_cache_parameter_groups:
       resources_key: CacheParameterGroups
+      type: ParameterGroup
+      identifier: CacheParameterGroupName
+      properties:
+        - CacheParameterGroupFamily
+        - Description
     describe_cache_subnet_groups:
       resources_key: CacheSubnetGroups
+      type: SubnetGroup
+      identifier: CacheSubnetGroupName
+      properties:
+        - CacheSubnetGroupDescription
+      references:
+        VpcId:
+          type: ec2.Vpc
+        Subnets:
+          type: ec2.Subnet
+          identifier: SubnetIdentifier
     describe_replication_groups:
       resources_key: ReplicationGroups
-    describe_reserved_cache_nodes:
-      resources_key: ReservedCacheNodes
+      type: ReplicationGroup
+      identifier: ReplicationGroupId
+      properties:
+        - Description
+        - Status
+      references:
+        MemberClusters:
+          type: CacheCluster
     describe_snapshots:
       resources_key: Snapshots
+      type: Snapshot
+      identifier: SnapshotName
+      references:
+        CacheClusterId:
+          type: CacheCluster
+        CacheParameterGroupName:
+          type: ParameterGroup
+        CacheSubnetGroupName:
+          type: SubnetGroup
+        VpcId:
+          type: ec2.Vpc
