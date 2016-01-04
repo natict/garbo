@@ -390,3 +390,82 @@ elasticache:
           type: SubnetGroup
         VpcId:
           type: ec2.Vpc
+rds:
+  paginators:
+    describe_db_instances:
+      resources_key: DBInstances
+      type: DBInstance
+      identifier: DBInstanceIdentifier
+      created: InstanceCreateTime
+      properties:
+        - DBInstanceClass
+        - Engine
+        - EngineVersion
+        - DBInstanceStatus
+        - DBName
+      references:
+        VpcSecurityGroups:
+          type: ec2.SecurityGroup
+          identifier: VpcSecurityGroupId
+        DBParameterGroups:
+          type: DBParameterGroup
+          identifier: DBParameterGroupName
+        DBSubnetGroup:
+          type: DBSubnetGroup
+          identifier: DBSubnetGroupName
+        ReadReplicaDBInstanceIdentifiers:
+          type: DBInstance
+        OptionGroupMemberships:
+          type: OptionGroup
+          identifier: OptionGroupName
+    describe_db_parameter_groups:
+      resources_key: DBParameterGroups
+      type: DBParameterGroup
+      identifier: DBParameterGroupName
+      properties:
+        - DBParameterGroupFamily
+        - Description
+    describe_db_subnet_groups:
+      resources_key: DBSubnetGroups
+      type: DBSubnetGroup
+      identifier: DBSubnetGroupName
+      properties:
+        - DBSubnetGroupDescription
+        - SubnetGroupStatus
+      references:
+        VpcId:
+          type: ec2.Vpc
+        Subnets:
+          type: ec2.Subnet
+          identifier: SubnetIdentifier
+    describe_option_groups:
+      resources_key: OptionGroupsList
+      type: OptionGroup
+      identifier: OptionGroupName
+      properties:
+        - OptionGroupDescription
+        - EngineName
+        - MajorEngineVersion
+      references:
+        Options:
+          reference_path: VpcSecurityGroupMemberships
+          type: ec2.SecurityGroup
+          identifier: VpcSecurityGroupId
+    describe_db_snapshots:
+      resources_key: DBSnapshots
+      type: DBSnapshot
+      identifier: DBSnapshotIdentifier
+      created: SnapshotCreateTime
+      properties:
+        - AllocatedStorage
+        - SnapshotType
+        - StorageType
+      references:
+        DBInstanceIdentifier:
+          type: DBInstance
+        VpcId:
+          type: ec2.Vpc
+        OptionGroupName:
+          type: OptionGroup
+        SourceDBSnapshotIdentifier:
+          type: DBSnapshot
