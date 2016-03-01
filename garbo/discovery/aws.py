@@ -4,12 +4,13 @@
 
 import logging
 import os
+from types import NoneType
 
 import boto3
+import yaml
 from boto3.resources.collection import CollectionManager
 from botocore.exceptions import ClientError
 from botocore.utils import parse_to_aware_datetime
-import yaml
 
 import garbo.config
 from garbo.model import Resource, Relation
@@ -17,23 +18,21 @@ from garbo.utils import rgetattr, rget, squash_list
 
 __author__ = 'nati'
 
-AWS_RESOURCE_DEFAULT_PROPERTIES = ['tags', 'state', 'description', 'Description', 'Status', 'Tags']
-
 
 class AWSResource(Resource):
     AWS_TYPE_BASE = 'aws'
     AWS_TYPE_SEP = '.'
 
-    def __init__(self, service, type, id, created=None, properties=None):
-        aws_type = AWSResource.generate_aws_type(service, type)
+    def __init__(self, service, resource_type, identifier, created=None, properties=None):
+        aws_type = AWSResource.generate_aws_type(service, resource_type)
         created = parse_to_aware_datetime(created) if created else None  # normalize creation date
         properties = {k: v for k, v in (properties or {}).iteritems() if v}  # filter empty properties
-        super(AWSResource, self).__init__(aws_type, id, created, properties)
+        super(AWSResource, self).__init__(aws_type, identifier, created, properties)
 
     @staticmethod
-    def generate_aws_type(service, type):
-        return AWSResource.AWS_TYPE_SEP.join([AWSResource.AWS_TYPE_BASE] +
-                                             ([type] if AWSResource.AWS_TYPE_SEP in type else [service, type]))
+    def generate_aws_type(service, resource_type):
+        return AWSResource.AWS_TYPE_SEP.join([AWSResource.AWS_TYPE_BASE, resource_type]
+                                             if AWSResource.AWS_TYPE_SEP in resource_type else [service, resource_type])
 
 
 class AWSRelation(Relation):
@@ -67,12 +66,11 @@ def _referenced_resources(references_map, src_resource, service_name):
         id_attribute = reference_config.get('identifier', 'id')
         for resource in squash_list(resources):
             resource_id = resource if isinstance(resource, basestring) else \
-                rget(resource, id_attribute) if isinstance(resource, dict) else \
-                rgetattr(resource, id_attribute)
+                rget(resource, id_attribute) if isinstance(resource, dict) else rgetattr(resource, id_attribute)
             if all((resource_type, resource_id)):
                 yield AWSResource(service=service_name,
-                                  type=resource_type,
-                                  id=resource_id)
+                                  resource_type=resource_type,
+                                  identifier=resource_id)
             elif not reference_config.get('ignore_missing', False):
                 logging.warn('Referenced resource type or identifier is missing '
                              '(type=%s, id=%s, resource=%s)',
@@ -80,12 +78,12 @@ def _referenced_resources(references_map, src_resource, service_name):
 
 
 def _extract_collections(session, service_name, collections):
+    builtin_types = (str, unicode, int, long, float, bool, NoneType, list, tuple, dict)
     if collections:
         service = session.resource(service_name)
         for collection_name, collection_config in collections.iteritems():
             collection = getattr(service, collection_name)
             resource_type = collection_config.get('type')
-            resource_properties = AWS_RESOURCE_DEFAULT_PROPERTIES + collection_config.get('properties', [])
             resource_created_attr = collection_config.get('created', 'create_date')
             for resource in _resources_from_collection(collection, collection_config.get('iterator')):
                 resource_id = getattr(resource, collection_config.get('identifier', 'id'))
@@ -94,10 +92,12 @@ def _extract_collections(session, service_name, collections):
                                  resource_type, resource_id, resource)
                     continue
                 aws_resource = AWSResource(service=service_name,
-                                           type=resource_type,
-                                           id=resource_id,
+                                           resource_type=resource_type,
+                                           identifier=resource_id,
                                            created=getattr(resource, resource_created_attr, ''),
-                                           properties={p: getattr(resource, p, '') for p in resource_properties})
+                                           properties={p: repr(getattr(resource, p, '')) for p in dir(resource)
+                                                       if not p.startswith('_') and isinstance(getattr(resource, p),
+                                                                                               builtin_types)})
                 print aws_resource
                 for referenced_resource in _referenced_resources(collection_config.get('references'),
                                                                  resource, service_name):
@@ -119,7 +119,6 @@ def _extract_paginators(session, service_name, paginators):
         for paginator_name, pagintor_config in paginators.iteritems():
             paginator = client.get_paginator(paginator_name)
             resource_type = pagintor_config.get('type')
-            resource_properties = AWS_RESOURCE_DEFAULT_PROPERTIES + pagintor_config.get('properties', [])
             for resource in _resources_from_paginator(paginator, pagintor_config.get('resources_key')):
                 resource_id = resource.get(pagintor_config.get('identifier', 'id'))
                 if not all((resource_type, resource_id)):
@@ -127,10 +126,10 @@ def _extract_paginators(session, service_name, paginators):
                                  resource_type, resource_id, resource)
                     continue
                 aws_resource = AWSResource(service=service_name,
-                                           type=resource_type,
-                                           id=resource_id,
+                                           resource_type=resource_type,
+                                           identifier=resource_id,
                                            created=resource.get(pagintor_config.get('created', 'CreatedTime'), 0),
-                                           properties={p: rget(resource, p) for p in resource_properties})
+                                           properties=resource)
                 print aws_resource
                 for referenced_resource in _referenced_resources(pagintor_config.get('references'),
                                                                  resource, service_name):

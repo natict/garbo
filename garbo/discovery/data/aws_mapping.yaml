@@ -18,9 +18,6 @@ ec2:
           Owners:
             - self
       created: creation_date
-      properties:
-        - name
-        - public
       references:
         block_device_mappings:
           type: Snapshot
@@ -29,12 +26,6 @@ ec2:
     instances:
       type: Instance
       created: launch_time
-      properties:
-        - private_dns_name
-        - private_ip_address
-        - public_dns_name
-        - public_ip_address
-        - spot_instance_request_id
       references:
         classic_address:
           type: ClassicAddress
@@ -96,8 +87,6 @@ ec2:
           type: Vpc
     security_groups:
       type: SecurityGroup
-      properties:
-        - group_name
       references:
         ip_permissions:
           type: SecurityGroup
@@ -151,9 +140,6 @@ iam:
     groups:
       type: Group
       identifier: name
-      properties:
-        - group_name
-        - group_id
       references:
         attached_policies:
           type: Policy
@@ -175,8 +161,6 @@ iam:
       iterator:
         filter:
           Scope: Local
-      properties:
-        - policy_name
       references:
         attached_groups:
           type: Group
@@ -204,8 +188,6 @@ iam:
     server_certificates:
       type: ServerCertificate
       identifier: name
-      properties:
-        - server_certificate_metadata
     users:
       type: User
       identifier: name
@@ -268,10 +250,6 @@ elb:
       resources_key: LoadBalancerDescriptions
       type: LoadBalancer
       identifier: LoadBalancerName
-      properties:
-        - DNSName
-        - CanonicalHostedZoneName
-        - CanonicalHostedZoneNameID
       references:
         VPCId:
           type: ec2.Vpc
@@ -292,8 +270,6 @@ autoscaling:
       resources_key: AutoScalingGroups
       type: AutoScalingGroup
       identifier: AutoScalingGroupName
-      properties:
-        - AutoScalingGroupARN
       references:
         LaunchConfigurationName:
           type: LaunchConfiguration
@@ -310,9 +286,6 @@ autoscaling:
       resources_key: LaunchConfigurations
       type: LaunchConfiguration
       identifier: LaunchConfigurationName
-      properties:
-        - LaunchConfigurationARN
-        - InstanceType
       references:
         ImageId:
           type: ec2.Image
@@ -331,12 +304,6 @@ elasticache:
       type: CacheCluster
       identifier: CacheClusterId
       created: CacheClusterCreateTime
-      properties:
-        - Engine
-        - EngineVersion
-        - CacheClusterStatus
-        - ConfigurationEndpoint.Address
-        - ConfigurationEndpoint.Port
       references:
         SecurityGroups:
           type: ec2.SecurityGroup
@@ -356,14 +323,10 @@ elasticache:
       resources_key: CacheParameterGroups
       type: ParameterGroup
       identifier: CacheParameterGroupName
-      properties:
-        - CacheParameterGroupFamily
     describe_cache_subnet_groups:
       resources_key: CacheSubnetGroups
       type: SubnetGroup
       identifier: CacheSubnetGroupName
-      properties:
-        - CacheSubnetGroupDescription
       references:
         VpcId:
           type: ec2.Vpc
@@ -397,12 +360,6 @@ rds:
       type: DBInstance
       identifier: DBInstanceIdentifier
       created: InstanceCreateTime
-      properties:
-        - DBInstanceClass
-        - Engine
-        - EngineVersion
-        - DBInstanceStatus
-        - DBName
       references:
         VpcSecurityGroups:
           type: ec2.SecurityGroup
@@ -422,16 +379,10 @@ rds:
       resources_key: DBParameterGroups
       type: DBParameterGroup
       identifier: DBParameterGroupName
-      properties:
-        - DBParameterGroupFamily
-        - Description
     describe_db_subnet_groups:
       resources_key: DBSubnetGroups
       type: DBSubnetGroup
       identifier: DBSubnetGroupName
-      properties:
-        - DBSubnetGroupDescription
-        - SubnetGroupStatus
       references:
         VpcId:
           type: ec2.Vpc
@@ -442,10 +393,6 @@ rds:
       resources_key: OptionGroupsList
       type: OptionGroup
       identifier: OptionGroupName
-      properties:
-        - OptionGroupDescription
-        - EngineName
-        - MajorEngineVersion
       references:
         Options:
           reference_path: VpcSecurityGroupMemberships
@@ -456,10 +403,6 @@ rds:
       type: DBSnapshot
       identifier: DBSnapshotIdentifier
       created: SnapshotCreateTime
-      properties:
-        - AllocatedStorage
-        - SnapshotType
-        - StorageType
       references:
         DBInstanceIdentifier:
           type: DBInstance
