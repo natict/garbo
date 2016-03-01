@@ -25,11 +25,15 @@ class AWSResource(Resource):
     AWS_TYPE_SEP = '.'
 
     def __init__(self, service, type, id, created=None, properties=None):
-        aws_type = AWSResource.AWS_TYPE_SEP.join([AWSResource.AWS_TYPE_BASE] +
-                                                 ([type] if AWSResource.AWS_TYPE_SEP in type else [service, type]))
+        aws_type = AWSResource.generate_aws_type(service, type)
         created = parse_to_aware_datetime(created) if created else None  # normalize creation date
         properties = {k: v for k, v in (properties or {}).iteritems() if v}  # filter empty properties
         super(AWSResource, self).__init__(aws_type, id, created, properties)
+
+    @staticmethod
+    def generate_aws_type(service, type):
+        return AWSResource.AWS_TYPE_SEP.join([AWSResource.AWS_TYPE_BASE] +
+                                             ([type] if AWSResource.AWS_TYPE_SEP in type else [service, type]))
 
 
 class AWSRelation(Relation):
@@ -133,6 +137,23 @@ def _extract_paginators(session, service_name, paginators):
                     print AWSRelation(src_resource=aws_resource, dst_resource=referenced_resource)
 
 
+def print_mapping_stats(aws_mapping, verbose=False):
+    resources, relations = set(), set()
+    for service_name, service_config in aws_mapping.iteritems():
+        for service_iterator, service_iterator_config in service_config.iteritems():
+            if isinstance(service_iterator_config, dict):
+                for resource_name, resource_config in service_iterator_config.iteritems():
+                    resource_type = AWSResource.generate_aws_type(service_name, resource_config.get('type'))
+                    resources.add(resource_type)
+                    for reference_name, reference_config in resource_config.get('references', {}).iteritems():
+                        reference_type = AWSResource.generate_aws_type(service_name, reference_config.get('type'))
+                        relations.add((resource_type, reference_type))
+    print 'AWS Discovery loaded {} resource types and {} relation types'.format(len(resources), len(relations))
+    if verbose:
+        print 'Resources: ', resources
+        print 'Relation: ', relations
+
+
 def extract_all(regions=None):
     """
     Extract AWS Resources and Relations
@@ -140,6 +161,7 @@ def extract_all(regions=None):
     :param regions: list of region names to extract from
     """
     aws_mapping = yaml.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'aws_mapping.yaml')))
+    print_mapping_stats(aws_mapping)
     regions = regions or garbo.config.aws.regions
 
     for service_name, service_config in aws_mapping.iteritems():
