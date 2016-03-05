@@ -7,7 +7,7 @@ except ImportError:
 import pkgutil
 
 from garbo.config import aws
-from garbo.config import dummy_storage
+from garbo.config import neo4j
 
 __author__ = 'nati'
 

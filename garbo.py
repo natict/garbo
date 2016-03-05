@@ -1,73 +1,43 @@
-"""
-...
-"""
+#!/usr/bin/env python2.7
 
-import argparse
+import glob
 import logging
+import time
 
-import yaml
-
-from garbo import config, utils
+import click as click
+import os
+from garbo import config
 from garbo.discovery import aws
-from garbo.storage.dummy import dump_graph, load_graph
-from garbo.storage.d3js import D3JSForce
+from garbo.storage import neo4j
 
 __author__ = 'nati'
 
 
-def _get_parsed_arguments():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--applications', '-a', default=False,
-                        help='YAML file containing Core Resources per application')
-
-    parser.add_argument('--discovery', '-d', action='store_true', default=False,
-                        help='Perform a discovery (don\'t use stored graph). default: False')
-
-    parser.add_argument('--gen-d3js', '-g', action='store_true', default=False,
-                        help='Generate a json file for D3JS Directed Force Graph. default: False')
-
-    return parser.parse_args()
-
-
-def _gen_d3js(graph):
-    # TODO: move to d3js.py ?
-    fdg = D3JSForce()
-    for item in graph:
-        fdg.add_item(item)
-    fdg.export('d3js/garbo.json')
-
-
-def main():
-    # Load configuration and parse arguments
+@click.group()
+@click.option('--debug-level', help='e.g. info', default='warn')
+def cli(debug_level):
+    logging.basicConfig(level=debug_level.upper())
     config.load()
-    logging.basicConfig(level=logging.INFO)
-    args = _get_parsed_arguments()
 
-    if args.discovery:
-        # Perform discovery into selected storage
-        graph = list(aws.collect_all())
-        dump_graph(graph)
-    else:
-        # Read resources and relations from storage
-        graph = load_graph()
 
-    unused_graph = []
-    if args.applications:
-        # Read applications file
-        with open(args.applications) as applications_file:
-            applications = yaml.load(applications_file)
-        root_resources = [r for app in applications for r in applications[app]]
+@cli.command(help='re-discover the graph from AWS')
+def discover():
+    neo4j.load_from_entries(aws.discover_all())
 
-        # Perform mark & Sweep
-        unused_graph = utils.mark_and_sweep(graph, root_resources)
 
-    out_graph = unused_graph if args.applications else graph
+@cli.command(help='dump the graph to file')
+@click.option('--filename', '-f', help='cypher file', default=None)
+def dump(filename):
+    filename = filename or 'data/dump_{}.cypher'.format(str(int(time.time())))
+    neo4j.dump_to_file(filename)
 
-    if args.gen_d3js:
-        # Generate a graph
-        _gen_d3js(out_graph)
+
+@cli.command(help='load given file or newest dump')
+@click.option('--filename', '-f', help='cypher file', default=None)
+def load(filename):
+    filename = filename or max(glob.iglob('data/dump_*.cypher'), key=os.path.getctime)
+    neo4j.load_from_file(filename)
 
 
 if __name__ == '__main__':
-    main()
+    cli()

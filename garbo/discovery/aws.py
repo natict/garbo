@@ -98,10 +98,10 @@ def _extract_collections(session, service_name, collections):
                                            properties={p: repr(getattr(resource, p, '')) for p in dir(resource)
                                                        if not p.startswith('_') and isinstance(getattr(resource, p),
                                                                                                builtin_types)})
-                print aws_resource
+                yield aws_resource
                 for referenced_resource in _referenced_resources(collection_config.get('references'),
                                                                  resource, service_name):
-                    print AWSRelation(src_resource=aws_resource, dst_resource=referenced_resource)
+                    yield AWSRelation(src_resource=aws_resource, dst_resource=referenced_resource)
 
 
 def _resources_from_paginator(paginator, resources_key):
@@ -130,10 +130,10 @@ def _extract_paginators(session, service_name, paginators):
                                            identifier=resource_id,
                                            created=resource.get(pagintor_config.get('created', 'CreatedTime'), 0),
                                            properties=resource)
-                print aws_resource
+                yield aws_resource
                 for referenced_resource in _referenced_resources(pagintor_config.get('references'),
                                                                  resource, service_name):
-                    print AWSRelation(src_resource=aws_resource, dst_resource=referenced_resource)
+                    yield AWSRelation(src_resource=aws_resource, dst_resource=referenced_resource)
 
 
 def print_mapping_stats(aws_mapping, verbose=False):
@@ -153,9 +153,9 @@ def print_mapping_stats(aws_mapping, verbose=False):
         print 'Relation: ', relations
 
 
-def extract_all(regions=None):
+def discover_all(regions=None):
     """
-    Extract AWS Resources and Relations
+    Extract AWS Resources and Relations (in no particular order)
     :type regions: list
     :param regions: list of region names to extract from
     """
@@ -166,9 +166,7 @@ def extract_all(regions=None):
     for service_name, service_config in aws_mapping.iteritems():
         for region in (regions if service_config.get('regional', True) else regions[:1]):
             session = boto3.Session(region_name=region)
-            _extract_collections(session, service_name, service_config.get('collections'))
-            _extract_paginators(session, service_name, service_config.get('paginators'))
-
-
-if __name__ == '__main__':
-    extract_all()
+            for e in _extract_collections(session, service_name, service_config.get('collections')):
+                yield e
+            for e in _extract_paginators(session, service_name, service_config.get('paginators')):
+                yield e

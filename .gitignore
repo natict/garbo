@@ -1,6 +1,6 @@
 # Garbo
 garbo.cfg
-d3js/garbo.json
+data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
